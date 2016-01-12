@@ -6,7 +6,8 @@ gulp.task('js-test', function () {
 	console.log('running js tests...');
 	return gulp.src('src/tests/**/*.js', {read: false})
 			.pipe(mocha({reporter: 'nyan'}))
-			.once('error', function() {
+			.once('error', function(err) {
+				console.log(err);
 				process.exit(1);
 			})
 			.once('end', function() {
