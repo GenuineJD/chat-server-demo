@@ -3,6 +3,8 @@ var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 
+var linkify = require('linkifyjs');
+var linkifyHtml = require('linkifyjs/html');
 
 var PORT = 3000;
 var MSG_LIST_MAX_LENGTH = 20;
@@ -23,6 +25,7 @@ app.use(express.static('src/public'));
 // socket.io connection has been established
 io.on('connection', function(socket){
 	console.log('client connected');
+	// console.log(socket);
 
 	// socket.on('_chat', function(msg){
 	// 	io.emit('_chat', msg);
@@ -75,22 +78,29 @@ http.listen(PORT, function(){
 // 	store the message object 
 // 	emit the message to clients
 var onMessage = function(msg) {
+	msg.date = Date.now();
+	if(msg.message) {
+		msg.message = linkifyHtml(msg.message);
+	}
+	addMessage(msg);
 	io.emit('message',msg);
 }
 
 // login event handler
 // 
 // 	validate unique username
+// 	validate username format
 // 	add user to list
-// 	emit user list refresh message
 // 	emit user entered message
+// 	emit user list refresh message
 // 	
 // return result object
 //	status (bool) - true | false if the username is unique
 //	users (array) - list of users in the chat room
 //	
-var onLogin = function(username) {
+var onLogin = function(username, fn) {
 	console.log('login(): ' + username);
+	console.log(this.id);
 
 	var status = false;
 	var msg = 'Unknown';
@@ -101,16 +111,30 @@ var onLogin = function(username) {
 		msg = 'Username does not meet criteria!';
 	} else {
 		status = true;
-		users.push(username);
-		// TODO other stuff
+		users.push( {username: username, id: this.id } );
+		onMessage(
+			{ 
+				username: '',
+				message:  username + ' has joined.'
+			}
+		);
+		sendRefresh();
 	}
 
-	// send the response back
-	io.emit('loginCallback', { 
-		status: status,
-		username: username,
-		message: msg
-	});
+	if(fn) {
+		fn({ 
+			status: status,
+			message: msg,
+			messages: messages
+		});
+	}
+
+	// // send the response back
+	// io.emit('loginCallback', { 
+	// 	status: status,
+	// 	username: username,
+	// 	message: msg
+	// });
 }
 
 // disconnect event handler
@@ -120,13 +144,30 @@ var onLogin = function(username) {
 // 		another function 
 // 
 var onDisconnect = function() {
-	console.log('user disconnected')
+	// console.log('user disconnected ' + this.id);
+	var socketId = this.id;
+	users = users.filter(function(user) {
+		if(user.id == socketId) {
+			onMessage(
+				{
+					username: '',
+					message: user.username + ' has left.'
+				}
+			);
+		}
+		return user.id != socketId;
+	});
+	sendRefresh();
 }
 
 
 //////////////////////////////
 // helper functions
 //////////////////////////////
+
+var sendRefresh = function() {
+	io.emit('refreshUsers', users);
+}
 
 // validate that the username provided does not currently exist in the chat room
 //	
@@ -159,7 +200,9 @@ var isValidUsername = function(username) {
 // 	timestamp
 // 	
 var addMessage = function(message) {
-
+	if(messages.push(message) > MSG_LIST_MAX_LENGTH) {
+		messages.shift();
+	}
 }
 
 // format message string
@@ -172,4 +215,9 @@ var addMessage = function(message) {
 var formatMessage = function(msg) {
 	// TODO implement
 	return msg;
+}
+
+
+var removeUserWithId = function(userId) {
+
 }
