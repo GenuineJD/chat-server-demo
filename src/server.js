@@ -9,7 +9,7 @@ var linkifyHtml = require('linkifyjs/html');
 var PORT = 3000;
 var MSG_LIST_MAX_LENGTH = 20;
 
-// array of current user objects
+// array of current user objects { username, id }
 var users = [];
 
 // array of message objects
@@ -20,17 +20,11 @@ app.get('/', function(req, res){
 	res.sendFile(__dirname + '/index.html');
 });
 
+// serve static assets from the 'public' folder
 app.use(express.static('src/public'));
 
-// socket.io connection has been established
+// socket.io client connection handler
 io.on('connection', function(socket){
-	console.log('client connected');
-	// console.log(socket);
-
-	// socket.on('_chat', function(msg){
-	// 	io.emit('_chat', msg);
-	// });
-
 	// receive a message event 
 	// 
 	// data:
@@ -44,19 +38,9 @@ io.on('connection', function(socket){
 	// data:
 	// 	username
 	// 	
+	// may also contain a callback function for the client
+	// 	
 	socket.on('login', onLogin);
-
-	// socket.on('_login', function(username) {
-	// 	console.log('received login request for: ' + username);
-	// 	if(isUniqueUsername(username)) {
-	// 		console.log('adding user: ' + username);
-	// 		users.push(username);
-	// 	} else {
-	// 		// TODO send client failure message
-	// 		console.log('login failed');
-	// 		socket.emit('_login_fail');
-	// 	}
-	// });
 
 	// receive a disconnect event
 	// 
@@ -71,37 +55,25 @@ http.listen(PORT, function(){
 
 
 //////////////////////////////
-// socket functions/handlers
+// socket handlers
 //////////////////////////////
-
-// message event handler
-// 	store the message object 
-// 	emit the message to clients
-var onMessage = function(msg) {
-	msg.date = Date.now();
-	if(msg.message) {
-		msg.message = linkifyHtml(msg.message);
-	}
-	addMessage(msg);
-	io.emit('message',msg);
-}
 
 // login event handler
 // 
 // 	validate unique username
 // 	validate username format
 // 	add user to list
-// 	emit user entered message
-// 	emit user list refresh message
+// 	send user entered message
+// 	send user list refresh message
 // 	
-// return result object
-//	status (bool) - true | false if the username is unique
+// username (string) the username attempting to log in
+// fn (function) a client callback function (optional) to invoke
+// 	
+// invoke callback function with result object
+//	status (bool) - true | false if the username is unique and valid
 //	users (array) - list of users in the chat room
 //	
 var onLogin = function(username, fn) {
-	console.log('login(): ' + username);
-	console.log(this.id);
-
 	var status = false;
 	var msg = 'Unknown';
 
@@ -111,6 +83,7 @@ var onLogin = function(username, fn) {
 		msg = 'Username does not meet criteria!';
 	} else {
 		status = true;
+		// TODO sort users alphabetically?
 		users.push( {username: username, id: this.id } );
 		onMessage(
 			{ 
@@ -118,9 +91,10 @@ var onLogin = function(username, fn) {
 				message:  username + ' has joined.'
 			}
 		);
-		sendRefresh();
+		sendRefreshUsers();
 	}
 
+	// client callback function
 	if(fn) {
 		fn({ 
 			status: status,
@@ -128,26 +102,41 @@ var onLogin = function(username, fn) {
 			messages: messages
 		});
 	}
+}
 
-	// // send the response back
-	// io.emit('loginCallback', { 
-	// 	status: status,
-	// 	username: username,
-	// 	message: msg
-	// });
+// message event handler
+// 
+// 	set the date of the message to server UTC in epoch format
+//	check for links in the message and overwrite the original message string
+// 	store the message object in memory
+// 	emit the message to clients
+// 	
+// msg (obj)
+// 	message (string)
+// 	username (string)
+// 	
+// 	
+var onMessage = function(msg) {
+	msg.date = Date.now();
+	if(msg.message) {
+		msg.message = formatMessage(msg.message);
+	}
+	addMessage(msg);
+	io.emit('message',msg);
 }
 
 // disconnect event handler
-//
-// 	emit user disconnected message
+//	filter out the disconnected user from the users array
+//	when disconnected user is found, emit user disconnected message
 // 	emit user list refresh message
-// 		another function 
 // 
 var onDisconnect = function() {
-	// console.log('user disconnected ' + this.id);
+	// socket id for the disconnected client
 	var socketId = this.id;
 	users = users.filter(function(user) {
 		if(user.id == socketId) {
+			// should this functionality really be 
+			// inside the filter function?
 			onMessage(
 				{
 					username: '',
@@ -157,7 +146,7 @@ var onDisconnect = function() {
 		}
 		return user.id != socketId;
 	});
-	sendRefresh();
+	sendRefreshUsers();
 }
 
 
@@ -165,34 +154,44 @@ var onDisconnect = function() {
 // helper functions
 //////////////////////////////
 
-var sendRefresh = function() {
+// sendRefreshUsers()
+// 	emits a refreshUsers message to all connected clients and
+// 	sends a list of the currently logged in users
+// 	
+var sendRefreshUsers = function() {
 	io.emit('refreshUsers', users);
 }
 
-// validate that the username provided does not currently exist in the chat room
+// isUniqueUsername(username)
+// 	validate that the username provided does not currently exist in the chat room
+// 	
+// username (string)
 //	
 // returns:
 //	(bool) true | false
 //		
 var isUniqueUsername = function(username) {
-	// TODO validate username is unique
 	return users.indexOf(username) == -1;
 }
 
-// validate the username string meets the requirements
+// isValidusername(username)
+// 	validate the username meets the requirements
+// 
+// username (string)
 // 
 // returns:
 // 	(bool) true | false
 // 	
 var isValidUsername = function(username) {
-	// TODO validate string
+	// any server-side validation rules can go here
 	return true;
 }
 
-// add message object to the messages array
+// addMessage(message)
+// 	add message object to the messages array
 // 
 // 	push message object onto array
-// 	check array length, prune to (MSG_LIST_MAX_LENGTH) messages only 
+// 	check array length, prune to appropriate length as needed
 // 
 // data:
 // 	message
@@ -205,19 +204,16 @@ var addMessage = function(message) {
 	}
 }
 
-// format message string
+// formatMessage(msg)
+// 	format message string
 // 
 // 	detect links and replace with <a>'s
+// 	
+// msg (string)
 // 	
 // returns:
 // 	(string) html for formatted string
 // 			
 var formatMessage = function(msg) {
-	// TODO implement
-	return msg;
-}
-
-
-var removeUserWithId = function(userId) {
-
+	return linkifyHtml(msg);
 }
