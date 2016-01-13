@@ -1,4 +1,4 @@
-(function() {
+
   var socket = io();
   var username;
   var username_re = /^([a-zA-Z0-9]){3,12}$/; 
@@ -7,6 +7,8 @@
 
   var months = ['Jan','Feb','Mar','Apr','May','June','July','Aug','Sept','Oct','Nov','Dec'];
   var days = ['Sun','Mon','Tues','Wed','Thurs','Fri','Sat'];
+
+  var MSG_LIST_MAX_LENGTH = 20;
 
 
   ///////////////////////////
@@ -19,13 +21,16 @@
   //  send it to the socket
   //  clear the chat input field
   //  
-  document.getElementById('chatform').onsubmit = function(){
-    var el = getEl('m');
-    var msg = el.value;
-    sendMessage(msg);
-    el.value = '';
-    return false;
-  };
+  var chatform = document.getElementById('chatform');
+  if(chatform) {
+    chatform.onsubmit = function(){
+      var el = getEl('m');
+      var msg = el.value;
+      sendMessage(msg);
+      el.value = '';
+      return false;
+    };
+  }
 
   // handle login form submit
   //  
@@ -34,15 +39,18 @@
   //    display an error if it fails
   //  send a login message to the socket
   //  
-  document.getElementById('loginform').onsubmit = function() {
-    username = getEl('username').value;
-    if(!username_re.exec(username)) {
-      alert('Invalid username.  Use 3-12 alpha-numerics only.');
-    } else {
-      sendLogin(username);
-    }
-    return false;
-  };
+  var loginform = document.getElementById('loginform');
+  if(loginform) {
+    loginform.onsubmit = function() {
+      username = getEl('username').value;
+      if(!username_re.exec(username)) {
+        alert('Invalid username.  Use 3-12 alpha-numerics only.');
+      } else {
+        sendLogin(username);
+      }
+      return false;
+    };
+  }
 
   ///////////////////////////
   // socket handlers
@@ -156,7 +164,16 @@
     var li = document.createElement('li');
     li.innerHTML = formatMessage(msg);
 
-    getEl('messages').appendChild(li);
+    var messagesEl = getEl('messages');
+
+    if(messagesEl) {
+      messagesEl.appendChild(li);
+
+      if(messagesEl.children.length > MSG_LIST_MAX_LENGTH) {
+        messagesEl.removeChild(messagesEl.firstChild);
+      }
+    }
+
   };
 
   // formatMessage(msg)
@@ -252,6 +269,8 @@
 
   // zeroPad(i, len)
   //  add leading zeros to the front of a digit to ensure it is a least len characters
+  //  parses strings to floats where possible
+  //  rounds numbers to eliminate fractions
   //  
   //  i
   //    the current digit
@@ -259,7 +278,6 @@
   //    the minimum required length
   //    
   var zeroPad = function(i,len) {
-    return i.toString().length >= len ? i : Array(len+1-i.toString().length).join('0') + i;
+    var ii = Math.round(parseFloat(i));
+    return ii.toString().length >= len ? ii.toString() : Array(len+1-ii.toString().length).join('0') + ii;
   };
-
-})();
