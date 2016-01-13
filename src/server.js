@@ -20,6 +20,11 @@ app.get('/', function(req, res){
 	res.sendFile(__dirname + '/index.html');
 });
 
+// respond to /test
+app.get('/test', function(req, res) {
+	res.sendFile(__dirname + '/test.html');
+});
+
 // serve static assets from the 'public' folder
 app.use(express.static('src/public'));
 
