@@ -12,7 +12,8 @@ describe('Chat server test', function() {
 	var sockopts = {
         'reconnection delay' : 0,
         'reopen delay' : 0,
-		'force new connection' : true
+		'force new connection' : true,
+		'timeout' : 4000
     };
 
     var chathost = 'http://localhost:3000';
