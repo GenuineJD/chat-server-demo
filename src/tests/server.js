@@ -1,6 +1,8 @@
 var io = require('socket.io-client');
 var assert = require('assert');
 
+var test_users = ['user1','user2','user3'];
+var test_messages = ['test message 1','test message 2','test message 3 with a link to google.com']
 
 describe('Chat server test', function() {
 	var socket1;
@@ -15,93 +17,227 @@ describe('Chat server test', function() {
 
     var chathost = 'http://localhost:3000';
 
-	// before(function(done) {
-	// 	console.log('setting up chat server tests...');
-	// 	// Setup
- //        socket1 = io.connect('http://localhost:3000', sockopts);
- //        socket1.on('connect', function() {
- //            console.log('connected to socket1.');
- //            done();
- //        });
- //        socket1.on('disconnect', function() {
- //            console.log('socket1 disconnected.');
- //        });
- //        socket1.on('error', function() {
- //        	console.log('error connecting to chat server on socket1...');
- //        });
-	// });
-
-	after(function(done) {
-        // Cleanup
-        console.log('cleaning up chat server tests.')
-        if(socket1 && socket1.connected) {
-            console.log('disconnecting socket1...');
-            socket1.disconnect();
-        }
-        if(socket2 && socket2.connected) {
-            console.log('disconnecting socket2...');
-            socket2.disconnect();
-        }
-        if(socket3 && socket3.connected) {
-            console.log('disconnecting socket3...');
-            socket3.disconnect();
-        }
-        done();
-    });
-
 	describe('login', function() {
 		it('should return true with the first user', function(done) {
-			socket1 = io.connect(chathost, sockopts);
+			var socket1 = io.connect(chathost, sockopts);
 			socket1.on('connect', function() {
-				console.log('connected to socket1');
+
+				socket1.emit('login', test_users[0], function(result) {
+					assert.equal(result.status, true);
+					socket1.disconnect();
+					done();
+				});
+				
 			});
 
-			socket1.emit('login', 'myuniqueusername', function(result) {
-				assert.equal(result.status, true);
-				done();
-			});
 
 		});
 
 		it('should return false with a non-unique username', function(done) {
-			socket1 = io.connect(chathost, sockopts);
+			var socket1 = io.connect(chathost, sockopts);
 			socket1.on('connect', function() {
-				console.log('connected to socket1');
-			});
 
-			socket1.emit('login', 'myuniqueusername', function(data) {
+				socket1.emit('login', test_users[1], function(data) {
 
-				socket2 = io.connect(chathost, sockopts);
-				socket2.on('connect', function() {
-					console.log('connected to socket2');
-					socket2.emit('login', 'myuniqueusername', function(data) {
-						assert.equal(data.status, false);
-						done();
+					var socket2 = io.connect(chathost, sockopts);
+					socket2.on('connect', function() {
+
+						socket2.emit('login', test_users[1], function(data) {
+
+							assert.equal(data.status, false);
+							
+							socket2.disconnect();
+							socket1.disconnect();
+
+							done();
+						});
 					});
-				});
 
+				});
 			});
+
 
 		});
 
-		it('should return a status message if it fails')
+		it('should return a status message if it fails', function(done) {
+			var socket1 = io.connect(chathost, sockopts);
+			socket1.on('connect', function() {
 
-		it('should return a list of users');
+				socket1.emit('login', test_users[0], function(data) {
 
-		it('should broadcast a \'user entered\' message');
+					var socket2 = io.connect(chathost, sockopts);
+					socket2.on('connect', function() {
 
-		it('should broadcast a \'refresh users\' event');
+						socket2.emit('login', test_users[0], function(data) {
+
+							assert.equal(data.message, 'Username is already taken!');
+							
+							socket2.disconnect();
+							socket1.disconnect();
+
+							done();
+						});
+					});
+
+				});
+			});
+		});
+
+		it('should return a list of messages', function(done) {
+			var socket1 = io.connect(chathost, sockopts);
+			socket1.on('connect', function() {
+				socket1.emit('login', test_users[2], function(result) {
+					assert.notEqual(result.messages, undefined);
+					assert.notEqual(result.messages.length, 0);
+					socket1.disconnect();
+					done();
+				});
+				
+			});
+		});
+
+		it('should broadcast a \'user entered\' message', function(done) {
+			var socket1 = io.connect(chathost, sockopts);
+			socket1.on('connect', function() {
+				socket1.emit('login', test_users[2], function(result) {
+					var lastMessage = result.messages[result.messages.length-1];
+					assert.equal(lastMessage.message, 'user3 has joined.');
+					socket1.disconnect();
+					done();
+				});
+				
+			});
+		});
+
+		it('should broadcast a \'refresh users\' event', function(done) {
+			var socket1 = io.connect(chathost, sockopts);
+			var receivedRefresh = false;
+			socket1.on('connect', function() {
+				socket1.emit('login',test_users[0]);
+			});
+			socket1.on('refreshUsers', function(users) {
+				receivedRefresh = true;
+				socket1.disconnect();
+			});
+
+			socket1.on('disconnect', function() {
+				if(!receivedRefresh) {
+					assert.fail(1,2,'Refresh event not received!','');
+				}
+				done();
+			});
+		});
 
 	});
 
 	describe('message', function() {
-		it('should assign a date value');
-		it('should emit the message to all clients');
-		it('should detect and format links');
+		it('should assign a date value', function(done) {
+			var socket1 = io.connect(chathost, sockopts);
+			socket1.on('connect', function() {
+				socket1.emit('message', { message: test_messages[1], username: test_users[1] });
+			})
+			socket1.on('message', function(msg) {
+				assert.notEqual(msg.date, undefined);
+				socket1.disconnect();
+				done();
+			});
+		});
+		it('should emit the message to all clients', function(done) {
+			var msgs = 0;
+			var dissedClients = 0;
+
+			var socket1 = io.connect(chathost, sockopts);
+			socket1.on('connect', function() {
+
+				var socket2 = io.connect(chathost, sockopts);
+				socket2.on('connect', function() {
+
+					var socket3 = io.connect(chathost, sockopts);
+					socket3.on('connect', function() {
+
+						socket3.on('message', function(msg) {
+							assert.equal(msg.message, test_messages[1]);
+							msgs++;
+							socket3.disconnect();
+						})
+
+						socket3.on('disconnect', onDisconnect);
+
+						socket3.emit('message', { message: test_messages[1], username: test_users[1] });
+
+					})
+
+					socket2.on('message', function(msg) {
+						assert.equal(msg.message, test_messages[1]);
+						msgs++;
+						socket2.disconnect();
+					})
+
+					socket2.on('disconnect', onDisconnect);
+				})
+
+				socket1.on('message', function(msg) {
+					assert.equal(msg.message, test_messages[1]);
+					msgs++;
+					socket1.disconnect();
+				});
+
+				socket1.on('disconnect', onDisconnect);
+
+			});
+
+			var onDisconnect = function() {
+				if(++dissedClients == 3) {
+					assert.equal(msgs, 3);
+					done();
+				}
+			}
+		});
+		it('should detect and format links', function(done) {
+			var socket1 = io.connect(chathost, sockopts);
+			socket1.on('connect', function() {
+				socket1.emit('message', { message: test_messages[2], username: test_users[2] } );
+			});
+
+			socket1.on('message', function(msg) {
+				assert.equal(msg.message,'test message 3 with a link to <a href="http://google.com" class="linkified" target="_blank">google.com</a>');
+				socket1.disconnect();
+				done();
+			})
+		});
 	});
 
 	describe('disconnect', function() {
-		it('should broadcast a \'user left\' message');
-		it('should broadcast a \'refresh users\' event');
+		it('should broadcast a \'user left\' message', function(done) {
+			var socket1 = io.connect(chathost, sockopts);
+			socket1.on('connect', function() {
+				var socket2 = io.connect(chathost, sockopts);
+				socket2.on('connect', function() {
+					socket1.emit('login',test_users[0], function(data) {
+						socket1.disconnect();
+					});
+				});
+				socket2.on('message', function(msg) {
+					if(msg.message == test_users[0] + ' has left.') {
+						socket2.disconnect();
+						done();
+					}
+				});
+			});
+		});
+		it('should broadcast a \'refresh users\' event', function(done) {
+			var socket1 = io.connect(chathost, sockopts);
+			socket1.on('connect', function() {
+				var socket2 = io.connect(chathost, sockopts);
+				socket2.on('connect', function() {
+					socket1.emit('login',test_users[0], function(data) {
+						socket1.disconnect();
+					});
+				});
+				socket2.on('refreshUsers', function(msg) {
+					done();
+				});
+			});
+		});
 	});
 });
