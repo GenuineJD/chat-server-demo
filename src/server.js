@@ -58,6 +58,16 @@ http.listen(PORT, function(){
 	console.log('app is running and listening on *:' + PORT);
 });
 
+http.on('error', function(e) {
+	console.log('whoops!');
+	if(e.code == 'EADDRINUSE') {
+		console.log('address is in use.  Please kill anything listening on port',PORT);
+	}
+	this.close(function() {
+		console.log('server has shut down');
+	});
+})
+
 
 //////////////////////////////
 // socket handlers
