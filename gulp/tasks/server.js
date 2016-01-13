@@ -6,5 +6,5 @@ gulp.task('server', function () {
     script: 'src/server.js'
   , ext: 'js html'
   , env: { 'NODE_ENV': 'development' }
-  })
-})
+  });
+});
