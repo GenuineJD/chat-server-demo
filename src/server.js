@@ -176,7 +176,10 @@ var sendRefreshUsers = function() {
 //	(bool) true | false
 //		
 var isUniqueUsername = function(username) {
-	return users.indexOf(username) == -1;
+	var user = users.find(function(user,idx,arr) {
+		return user.username == username;
+	});
+	return user == undefined;
 }
 
 // isValidusername(username)
